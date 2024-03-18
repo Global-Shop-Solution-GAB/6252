@@ -1,0 +1,894 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.F_ItemRec..Create
+Gui.F_ItemRec..Caption("Material Reconciliation")
+Gui.F_ItemRec..Size(15120,8940)
+Gui.F_ItemRec..MinX(12255)
+Gui.F_ItemRec..MinY(7635)
+Gui.F_ItemRec..Position(0,0)
+Gui.F_ItemRec..BackColor(-2147483633)
+Gui.F_ItemRec..MousePointer(0)
+Gui.F_ItemRec..Event(UnLoad,Unload)
+Gui.F_ItemRec.gsgcDistribution.Create(GsGridControl)
+Gui.F_ItemRec.gsgcDistribution.Size(14430,6270)
+Gui.F_ItemRec.gsgcDistribution.Position(255,1410)
+Gui.F_ItemRec.gsgcDistribution.Anchor(15)
+Gui.F_ItemRec.cmdIssue.Create(Button)
+Gui.F_ItemRec.cmdIssue.Size(1305,375)
+Gui.F_ItemRec.cmdIssue.Position(13320,7965)
+Gui.F_ItemRec.cmdIssue.Caption("Issue Material")
+Gui.F_ItemRec.cmdIssue.Event(Click,IssueMaterial)
+Gui.F_ItemRec.cmdIssue.Anchor(10)
+Gui.F_ItemRec.cmdIssue.TabStop(True)
+Gui.F_ItemRec.cmdIssue.TabIndex(6)
+Gui.F_ItemRec.cmdRefresh.Create(Button)
+Gui.F_ItemRec.cmdRefresh.Size(855,375)
+Gui.F_ItemRec.cmdRefresh.Position(4365,375)
+Gui.F_ItemRec.cmdRefresh.Caption("REFRESH")
+Gui.F_ItemRec.cmdRefresh.Event(Click,Refresh)
+Gui.F_ItemRec.cmdRefresh.TabStop(True)
+Gui.F_ItemRec.cmdRefresh.TabIndex(4)
+Gui.F_ItemRec.cmdRefresh.Enabled(False)
+Gui.F_ItemRec.cmdRefresh.Visible(False)
+Gui.F_ItemRec.lbl1.Create(Label,"Material",True,1935,255,0,330,180,True,0,"Arial",8,-2147483633,0)
+Gui.F_ItemRec.txtPartNo.Create(TextBox,"",True,2580,300,0,315,420,True,0,"Arial",8,-2147483643,1)
+Gui.F_ItemRec.txtPartNo.TabStop(True)
+Gui.F_ItemRec.txtPartNo.TabIndex(1)
+Gui.F_ItemRec.cmdBrowser.Create(Button)
+Gui.F_ItemRec.cmdBrowser.Size(450,375)
+Gui.F_ItemRec.cmdBrowser.Position(3660,375)
+Gui.F_ItemRec.cmdBrowser.Caption("^")
+Gui.F_ItemRec.cmdBrowser.Event(Click,MaterialBrowser)
+Gui.F_ItemRec.cmdBrowser.TabStop(True)
+Gui.F_ItemRec.cmdBrowser.TabIndex(3)
+Gui.F_ItemRec.txtLoc.Create(TextBox,"",True,600,300,0,2955,420,True,0,"Arial",8,-2147483643,1)
+Gui.F_ItemRec.txtLoc.TabStop(True)
+Gui.F_ItemRec.txtLoc.TabIndex(2)
+Gui.F_ItemRec.txtLoc.Event(LostFocus,LastTimeRanCheck)
+Gui.F_ItemRec.lbl2.Create(Label,"Loc",True,555,255,0,2970,195,True,0,"Arial",8,-2147483633,0)
+Gui.F_ItemRec.progProcess.Create(ProgressBar)
+Gui.F_ItemRec.progProcess.Size(5010,255)
+Gui.F_ItemRec.progProcess.Position(9660,1065)
+Gui.F_ItemRec.progProcess.Anchor(13)
+Gui.F_ItemRec.lblProg.Create(Label,"Data Loading",True,3015,255,0,9690,825,True,0,"Arial",8,-2147483633,0)
+Gui.F_ItemRec.lblProg.Anchor(13)
+Gui.F_ItemRec.lblMsg.Create(Label,"Label",False,9315,555,0,240,870,True,0,"Arial",8,-2147483633,0)
+Gui.F_ItemRec.lblMsg.Anchor(6)
+Gui.F_ItemRec.txtOnHand.Create(TextBox,"",True,1560,300,0,5760,420,True,0,"Arial",8,-2147483643,1)
+Gui.F_ItemRec.txtOnHand.Locked(True)
+Gui.F_ItemRec.txtNewOH.Create(TextBox,"",True,1560,300,0,7395,420,True,0,"Arial",8,-2147483643,1)
+Gui.F_ItemRec.txtNewOH.NumericOnly(1)
+Gui.F_ItemRec.txtNewOH.Event(LostFocus,NewQuantityCalc)
+Gui.F_ItemRec.txtNewOH.TabStop(True)
+Gui.F_ItemRec.txtNewOH.TabIndex(5)
+Gui.F_ItemRec.lbl3.Create(Label,"On Hand Qty",True,1155,255,0,5760,180,True,0,"Arial",8,-2147483633,0)
+Gui.F_ItemRec.lbl4.Create(Label,"Adjusted On Hand",True,1425,255,0,7380,180,True,0,"Arial",8,-2147483633,0)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.External.Include.Library("450100.lib")
+V.Global.dLastDate.Declare(Date, "01/01/1900")
+V.Global.sLastTime.Declare(String, "000000")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Customer: Zephyr
+'Coder: FEQ (Sisco)
+'Date: Jan 2021
+
+'This is a dashboard that will allow the user to issue material to closed orders. and distribute late cost to job proportionally to 
+'The information in the dashboard will be driven by the selected part and the date that the project was previously ran.
+'The date last run will be stored in the GCG_6252_LAST_DT_ISS. When the user clicks on the menu item, the inventory browser will pop up, allowing them to select the inventory part.
+'There is an important note to make about the strucutre of the custom table. The time is stored similarly to how the time is stored in the item history table: 
+'it is an 8 character string, where the first two characters represent the hour out of 24, the next two characters represent the minutes out of 60,
+'the next two characters represent the seconds out of 60.
+'We do this to simplify the comparison when gathering data from the item history table, but it complicates things when determining the current date time when saving back to the table.
+'The selected part as well as the last date ran, will be used to generate the dashboard with the jobs where the part were used from the last time it was ran
+'The amount to be issued will be distributed to those jobs according to the percentage of use in the work order
+'This program uses the library 450100.lib for issuing material
+
+'X3 36GRIT (Part used to test in their system)
+
+F.Intrinsic.Control.Try
+V.Local.dInitial.Declare(Date, "03/02/2021")
+
+'The initial date for this project is 03/02/2021. If we the date is before that, dont do anything.
+F.Intrinsic.Control.If(V.Ambient.Date, <, V.Local.dInitial)
+	
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndIf
+
+'Prepare the screen for the first opening
+F.Intrinsic.Control.CallSub(Preliminary)
+
+'The customer requested to go straight into the part browser when they open the menu
+F.Intrinsic.Control.CallSub(MaterialBrowser)
+
+'We then show the user the form
+Gui.F_ItemRec..Show
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.Error.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+'Note that this subroutine does not terminate the project. 
+'If an error happens that would be require termination of the program, this needs to be taken care of in the catch section of the subroutine this was called from
+F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Caller.ScriptFile, V.Ambient.Newline, V.Args.Subroutine, V.Args.ErrorNo, V.Args.ErrorDesc, V.Ambient.GABVersion, V.Local.sError)
+
+F.Intrinsic.UI.Msgbox(V.Local.sError, "CRITICAL ERROR")
+
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.Exitsub
+F.Intrinsic.Control.EndTry
+Program.Sub.Error.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.Try
+
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+'F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Unload.End
+
+Program.Sub.Serialize.Start
+F.Intrinsic.Control.Try
+V.Local.sSerialize.Declare(String, "")
+
+'At the end of the process. Save the current format of the grid
+Gui.F_SalesAnal.gsgcSalesAnal.Serialize("grid", V.Local.sSerialize)
+F.Global.Registry.AddValue(V.Caller.User, V.Caller.CompanyCode, "grid", 6252, 1000, False, "Serialize", False, 0, -999.0, 1/1/1980, 12:00:00 AM, V.Local.sSerialize)
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.Serialize.End
+
+Program.Sub.Deserialize.Start
+F.Intrinsic.Control.Try
+V.Local.sSerialize.Declare(String, "")
+
+'Extract the format of the grid per user
+F.Global.Registry.ReadValue(v.Caller.User, v.Caller.CompanyCode, "grid", 6252, 1000, 6, "", v.Local.sSerialize)
+
+F.Intrinsic.Control.If(V.Local.sSerialize, <>, "")
+	Gui.F_SalesAnal.gsgcSalesAnal.Deserialize(V.Local.sSerialize)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.Deserialize.End
+
+Program.Sub.Preliminary.Start
+F.Intrinsic.Control.Try
+
+'We are going to set up the screen before opening it initially
+Gui.F_ItemRec.cmdIssue.Enabled(False)
+Gui.F_ItemRec.gsgcDistribution.Visible(False)
+Gui.F_ItemRec.lblProg.Visible(False)
+Gui.F_ItemRec.progProcess.Visible(False)
+
+F.Intrinsic.UI.SetBrowserHotTypeAhead(True)
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.Preliminary.End
+
+Program.Sub.MaterialBrowser.Start
+F.Intrinsic.Control.Try
+V.Local.sReturn.Declare(String, "")
+
+'This will run from the browser button on the screen
+Gui.F_ItemRec..Enabled(False)
+
+F.Intrinsic.UI.Browser(105, "", V.Local.sReturn)
+
+'Check to see if a part was selected:
+F.Intrinsic.Control.If(V.Local.sReturn.UCase, <>, "***CANCEL***")
+	F.Intrinsic.String.Split(V.Local.sReturn, "*!*", V.Local.sReturn)
+	
+	'Fill out the form:
+	Gui.F_ItemRec.txtPartNo.Text(V.Local.sReturn(0))
+	Gui.F_ItemRec.txtLoc.Text(V.Local.sReturn(1))
+	
+	F.Intrinsic.Control.CallSub(LastTimeRanCheck)
+	
+F.Intrinsic.Control.EndIf
+
+Gui.F_ItemRec..Enabled(True)
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.MaterialBrowser.End
+
+Program.Sub.Refresh.Start
+F.Intrinsic.Control.Try
+V.Local.sSql.Declare(String, "")
+V.Local.sTemp.Declare(String, "")
+V.Local.sPartNo.Declare(String, "")
+V.Local.sPartRev.Declare(String, "")
+V.Local.sLoc.Declare(String, "")
+V.Local.sRet.Declare(String, "")
+V.Local.sMessage.Declare(String, "")
+V.Local.dTimeDisplay.Declare(String, "")
+
+F.ODBC.Connection!conx.OpenCompanyConnection
+
+Gui.F_ItemRec.gsgcDistribution.Visible(False)
+Gui.F_ItemRec.gsgcDistribution.SuspendLayout
+
+'Verify that the part that is in the textbox is valid.
+F.Intrinsic.String.Build("Select PART, QTY_ONHAND from V_INVENTORY_MSTR where PART = '{0}' and LOCATION = '{1}'", V.Screen.F_ItemRec!txtPartNo.Text, V.Screen.F_ItemRec!txtLoc.Text, V.Local.sSql)
+F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSql, V.Local.sRet)
+
+F.Intrinsic.Control.If(V.Local.sRet, <>, "")
+	'Populate the quantity on hand
+	F.Intrinsic.String.Split(V.Local.sRet, "*!*", V.Local.sRet)
+	Gui.F_ItemRec.txtOnHand.Text(V.Local.sRet(1).Float)
+	Gui.F_ItemRec.txtNewOH.Text("")
+F.Intrinsic.Control.Else
+	'If part is not valid, exit sub and close connection
+	Gui.F_ItemRec.txtPartNo.Text("")
+	Gui.F_ItemRec.txtLoc.Text("")
+	F.Intrinsic.UI.Msgbox("Part selected was not found. Please verify data.", "ERROR")
+	
+	F.ODBC.Connection!conx.Close
+	
+	F.Intrinsic.Control.ExitSub
+	
+F.Intrinsic.Control.EndIf
+
+'F.Intrinsic.String.RPad(V.Screen.F_ItemRec!txtPartNo.Text, " ", 20, V.Local.sTemp)
+'F.Intrinsic.String.Left(V.Local.sTemp, 17, V.Local.sPartNo)
+'F.Intrinsic.String.Right(V.Local.sTemp, 3, V.Local.sPartRev)
+'V.Local.sLoc.Set(V.Screen.F_ItemRec!txtLoc.Text)
+
+''****************************************************
+'V.Local.sRet.Set("")
+''Gather the date that the part was last ran:
+'F.Intrinsic.String.Build("Select Top 1 DATE_LAST_RUN, TIME_LAST_RUN from GCG_6252_LAST_DT_ISS where PART_NO = '{0}' and PART_REV = '{1}' and LOCATION = '{2}' order by DATE_LAST_RUN Desc", V.Local.sPartNo.Trim, V.Local.sPartRev.Trim, V.Local.sLoc.Trim, V.Local.sSql)
+
+'F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSql, V.Local.sRet)
+''****************************************************
+
+'F.Intrinsic.Control.If(V.Local.sRet.Trim, <>, "")
+'	F.Intrinsic.String.Split(V.Local.sRet, "*!*", V.Local.sRet)
+'	V.Global.dLastDate.Set(V.Local.sRet(0))
+'	V.Global.sLastTime.Set(V.Local.sRet(1))
+'	
+'	F.Intrinsic.Date.ConvertTString(V.Global.sLastTime, "HHNNSS", V.Local.dTimeDisplay)
+'	F.Intrinsic.String.Format(V.Local.dTimeDisplay, "h:Nn:Ss AMPM", V.Local.sTemp)
+'	
+'	F.Intrinsic.String.Build("Part number {0}{1} was last processed on {2} {3}.", V.Local.sPartNo, V.Local.sPartRev, V.Global.dLastDate, V.Local.sTemp, V.Local.sMessage)
+'	
+'F.Intrinsic.Control.Else
+'	F.Intrinsic.Date.DateAdd("d", -60, V.Ambient.Date, V.Global.dLastDate)
+'	
+'	F.Intrinsic.String.Build("No previously recorded process for part number {0}{1}. {3}Date {2} 12:00:00 AM will be used.", V.Local.sPartNo, V.Local.sPartRev, V.Global.dLastDate, V.Ambient.NewLine, V.Local.sMessage)
+'	
+'F.Intrinsic.Control.EndIf
+
+'Gui.F_ItemRec.lblMsg.Text(V.Local.sMessage)
+
+'Gui.F_ItemRec.lblMsg.Visible(True)
+
+'Begin populating data for the part/location/timeframe
+
+'Get INVENTORY_HISTORY transaction history, including wo stuff
+F.Intrinsic.Control.CallSub(PopulateItemHistory)
+
+F.ODBC.Connection!conx.Close
+
+F.Intrinsic.Control.UnBlockEvents
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.UnBlockEvents
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.Refresh.End
+
+Program.Sub.PopulateItemHistory.Start
+F.Intrinsic.Control.Try
+V.Local.sSql.Declare(String, "")
+V.Local.sTemp.Declare(String, "")
+V.Local.sTimeComp.Declare(String, "")
+V.Local.sFilter.Declare(String, "")
+V.Local.sHeadPart.Declare(String, "")
+V.Local.sHeadLoc.Declare(String, "")
+V.Local.sRet.Declare(String, "")
+V.Local.sExpression.Declare(String, "")
+V.Local.sMessage.Declare(String, "")
+V.Local.sSalesOrderLine.Declare(String, "")
+V.Local.sJobList.Declare
+V.Local.iLoop.Declare(Long, 0)
+V.Local.fQuantity.Declare(Float, 0.0000)
+V.Local.fCost.Declare(Float, 0.0000)
+V.Local.fPrice.Declare(Float, 0.0000)
+V.Local.fTotal.Declare(Float, 0.0000)
+V.Local.dTimeDisplay.Declare(Date, "01/01/1900")
+
+Gui.F_ItemRec.lblProg.Visible(True)
+
+F.Intrinsic.Control.BlockEvents
+
+'Pull list of Jobs & Suffixes where JOB_HEADER.PRODUCT_LINE is P1 or P2
+F.ODBC.Connection!conx.ExecuteAndReturn("select JOB + SUFFIX from JOB_HEADER where PRODUCT_LINE in ('P1', 'P2')",V.Local.sJobList)
+F.Intrinsic.String.Replace(V.Local.sJobList,"#$#","','",V.Local.sJobList)
+
+'For this subroutine, we are anticipating that the global variable for date has already been populated. 
+'We will be using that along with the part and location in the screen's textboxes to generate the shell of the datatable to be displayed:
+
+'...... Using the cast piece of the View for INVENTORY_HIST table because if we used the view, the time fields would come in as time and we would not be able to filter using that field
+'...... In this way, teh date field is actually a field, and the time will come in as an 8 digit string, which we can use to filter
+F.Intrinsic.String.Build("Select PART, LOCATION, IF (SUBSTRING (INVENTORY_HIST.DATE_HISTORY,1 ,2 )<= '99' AND SUBSTRING (INVENTORY_HIST.DATE_HISTORY, 1 ,2 )>= '00' AND SUBSTRING (INVENTORY_HIST.DATE_HISTORY ,3 ,2 )<= '12' AND SUBSTRING (INVENTORY_HIST.DATE_HISTORY ,3 ,2 )>= '01' AND SUBSTRING (INVENTORY_HIST.DATE_HISTORY ,5 ,2 )<= '31' AND SUBSTRING (INVENTORY_HIST.DATE_HISTORY ,5 ,2 )>= '01' ,IF (SUBSTRING (INVENTORY_HIST.DATE_HISTORY ,1 ,2 )< '80' ,CONVERT ('20' +SUBSTRING (INVENTORY_HIST.DATE_HISTORY ,1 ,2 )+'-' +SUBSTRING (INVENTORY_HIST.DATE_HISTORY ,3 ,2 )+'-' +SUBSTRING (INVENTORY_HIST.DATE_HISTORY ,5 ,2 ),SQL_DATE ),CONVERT ('19' +SUBSTRING (INVENTORY_HIST.DATE_HISTORY ,1 ,2 )+'-' +SUBSTRING (INVENTORY_HIST.DATE_HISTORY ,3 ,2 )+'-' +SUBSTRING (INVENTORY_HIST.DATE_HISTORY ,5 ,2 ),SQL_DATE )),CONVERT ('1900-01-01' ,SQL_DATE )) as DATE_HISTORY , INV_HIST_TIME, JOB, SUFFIX, SEQ as SEQUENCE, CODE_TRANSACTION, QUANTITY, COST from INVENTORY_HIST where PART = '{0}' and LOCATION = '{1}' and DATE_HISTORY >= '{2}' and JOB+SUFFIX in ('{3}') and CODE_TRANSACTION = 'J55'", V.Screen.F_ItemRec!txtPartNo.Text, V.Screen.F_ItemRec!txtLoc.Text, V.Global.dLastDate.PervasiveDate,V.Local.sJobList, V.Local.sSql)
+
+F.Data.DataTable.CreateFromSQL("dtItemHist", "conx", V.Local.sSql, True)
+F.Data.DataTable.AddColumn("dtItemHist", "HIDDEN_FLAG", "String", "")
+
+'Now we have to pull anything on the last day but before the time it was ran last... could get complicated. Need to extract time
+F.Intrinsic.String.Build("DATE_HISTORY = '{0}' and INV_HIST_TIME < '{1}00'", V.Global.dLastDate, V.Global.sLastTime, V.Local.sFilter)
+'In theory, if we create a dataview with the filter above, we should successfully capture all the entries that have already been processed on the day that it was last processed..
+F.Data.DataView.Create("dtItemHist", "dvTimeCheck", 22, V.Local.sFilter, "")
+F.Data.DataView.SetValue("dtItemHist", "dvTimeCheck", -1, "HIDDEN_FLAG", "Y")
+F.Data.DataView.Close("dtItemHist", "dvTimeCheck")
+
+F.Data.DataView.Create("dtItemHist", "dvJobs", 22, "[HIDDEN_FLAG] <> 'Y'", "JOB asc, SUFFIX asc, SEQUENCE asc")
+
+F.Intrinsic.Control.If(V.DataView.dtItemHist!dvJobs.RowCount, =, 0)
+	
+	'No data exists for the time range selected
+	F.Intrinsic.Date.ConvertTString(V.Global.sLastTime, "HHNNSS", V.Local.dTimeDisplay)
+	F.Intrinsic.String.Format(V.Local.dTimeDisplay, "Hh:Nn:Ss", V.Local.sTemp)
+	F.Intrinsic.String.Build("No issue material transactions were found for part {1}{1}{0}{1}{1}since {2} {3}.", V.Screen.F_ItemRec!txtPartNo.Text, V.Ambient.NewLine, V.Global.dLastDate,  V.Local.sTemp, V.Local.sMessage)
+	F.Intrinsic.UI.Msgbox(V.Local.sMessage, "NO DATA TO PROCESS")
+	Gui.F_ItemRec.txtPartNo.Text("")
+	Gui.F_ItemRec.txtLoc.Text("")
+	Gui.F_ItemRec.txtOnHand.Text("")
+	Gui.F_ItemRec.txtNewOH.Text("")
+	Gui.F_ItemRec.lblMsg.Visible(False)
+	Gui.F_ItemRec.lblProg.Visible(False)
+	
+	F.Data.DataView.Close("dtItemHist", "dvJobs")
+	F.Data.DataTable.Close("dtItemHist")
+	
+	F.Intrinsic.Control.UnBlockEvents
+	F.Intrinsic.Control.ExitSub
+	
+F.Intrinsic.Control.EndIf
+
+'After we have gathered the data from the table, we can save the current date/time to save to the custom datatable once the material is issued:
+V.Global.dLastDate.Set(V.Ambient.Date)
+F.Intrinsic.String.TimeStringSec(V.Ambient.Now, V.Global.sLastTime)
+
+F.Data.DataView.ToDataTableDistinct("dtItemHist", "dvJobs", "dtJSS", "JOB*!*SUFFIX*!*SEQUENCE")
+
+F.Data.DataTable.AddColumn("dtJSS", "Total_Qty", "Float")
+F.Data.DataTable.AddColumn("dtJSS", "Total_Cost", "Float")
+
+'We are going to need a table to calculate the weight of each job to use to distribute the material to be used
+F.Data.DataTable.Create("dtJobWeight", True)
+F.Data.DataTable.AddColumn("dtJobWeight", "JOB", "String")
+F.Data.DataTable.AddColumn("dtJobWeight", "SUFFIX", "String")
+F.Data.DataTable.AddColumn("dtJobWeight", "PART", "String")
+F.Data.DataTable.AddColumn("dtJobWeight", "LOCATION", "String")
+F.Data.DataTable.AddColumn("dtJobWeight", "QUANTITY", "Float")
+F.Data.DataTable.AddColumn("dtJobWeight", "INV_PRICE", "Float")
+F.Data.DataTable.AddColumn("dtJobWeight", "JOB_PRICE", "Float")
+
+Gui.F_ItemRec.progProcess.Min(0)
+Gui.F_ItemRec.progProcess.Max(V.DataTable.dtJSS.RowCount)
+Gui.F_ItemRec.progProcess.Visible(True)
+
+'we are going to have to make a dictionary of the price because the customer has apostrophes in the part number field
+'F.Data.Dictionary.CreateFromSQL("dicPricing", "conx", "Select RTRIM(LTRIM(PART)), AMT_PRICE from V_INVENTORY_MSTR")
+'F.Data.Dictionary.SetDefaultReturn("dicPricing", "0.0000")
+
+'They are wanting the pricing to come from the sales order line:
+'F.Data.DataTable.CreateFromSQL("dtSalesStuff", "conx", "Select JOB, SUFFIX, ORDER_NO + '-' + ORDER_LINE as ORLN from ORDER_TO_WO", True)
+'F.Data.DataTable.AddColumn("dtSalesStuff", "PRICING", "Float")
+
+'Function.Intrinsic.Debug.InvokeDebugger
+'Function.Intrinsic.Debug.Stop
+
+'F.Data.Dictionary.CreateFromSQL("dicPrice", "conx", "Select ORDER_NO + '-' + RECORD_NO, PRICE from V_ORDER_LINES")
+'F.Data.Dictionary.SetDefaultReturn("dicPrice", "0.0000")
+
+'F.Data.DataTable.FillFromDictionary("dtSalesStuff", "dicPrice", "ORLN", "PRICING")
+
+'Now we are going to loop through all the different job/suffix/sequences and calculate total amounts for quantity and cost per job/suffix/sequence
+F.Intrinsic.Control.For(V.Local.iLoop, 0, V.DataTable.dtJSS.RowCount--, 1)
+	
+	F.Intrinsic.String.Build("Gathering Data for Job '{0}'", V.DataTable.dtJSS(V.Local.iLoop).JOB!FieldValTrim, V.Local.sMessage)
+	Gui.F_ItemRec.lblProg.Text(V.Local.sMessage)
+	
+	Gui.F_ItemRec.progProcess.Value(V.Local.iLoop)
+	
+	F.Intrinsic.String.Build("JOB = '{0}' and SUFFIX = '{1}' and SEQUENCE = '{2}' and HIDDEN_FLAG <> 'Y'", V.DataTable.dtJSS(V.Local.iLoop).JOB!FieldValTrim, V.DataTable.dtJSS(V.Local.iLoop).SUFFIX!FieldValTrim, V.DataTable.dtJSS(V.Local.iLoop).SEQUENCE!FieldValTrim, V.Local.sFilter)
+	
+	F.Data.DataTable.Compute("dtItemHist", "SUM(QUANTITY)", V.Local.sFilter, V.Local.fQuantity)
+	F.Data.DataTable.Compute("dtItemHist", "SUM(COST)", V.Local.sFilter, V.Local.fCost)
+	
+	F.Data.DataTable.SetValue("dtJSS", V.Local.iLoop, "Total_Qty", V.Local.fQuantity, "Total_Cost", V.Local.fCost)
+	
+	'Add the job to the weight table if we dont have it already:
+	F.Intrinsic.String.Build("JOB = '{0}' and SUFFIX = '{1}'", V.DataTable.dtJSS(V.Local.iLoop).JOB!FieldValTrim, V.DataTable.dtJSS(V.Local.iLoop).SUFFIX!FieldValTrim, V.Local.sFilter)
+	F.Data.DataView.Create("dtJobWeight", "dvDupCheck", 22, V.Local.sFilter, "")
+	F.Intrinsic.Control.If(V.DataView.dtJobWeight!dvDupCheck.RowCount, =, 0)
+		
+		F.Intrinsic.String.Build("Select TOP 1 PART, QTY_ORDER, LOCATION, AMT_PRICE_PER_UNIT from V_JOB_HEADER where JOB = '{0}' and SUFFIX = '{1}'", V.DataTable.dtJSS(V.Local.iLoop).JOB!FieldValTrim, V.DataTable.dtJSS(V.Local.iLoop).SUFFIX!FieldValTrim, V.Local.sSql)
+		
+		F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSql, V.Local.sRet)
+		
+		F.Intrinsic.String.Split(V.Local.sRet, "*!*", V.Local.sRet)
+		V.Local.sRet.RedimPreserve(0,3)
+		
+		V.Local.fQuantity.Set(V.Local.sRet(1).Float)
+		V.Local.fPrice.Set(V.Local.sRet(3).Float)
+		
+'		F.Intrinsic.Control.If(V.Local.sRet(0).Trim, <>, "")
+'			'As long as we retrieved the part for the job, lets go grab the price..
+'			F.Intrinsic.String.Build("Select TOP 1 AMT_PRICE from V_INVENTORY_MSTR where PART = '{0}'", V.Local.sRet(0).Trim, V.Local.sSql)
+'			
+'			F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSql, V.Local.fPrice)
+'			
+'		F.Intrinsic.Control.Else
+'			
+'			V.Local.fPrice.Set(0.0000)
+'			
+'		F.Intrinsic.Control.EndIf
+		
+		'Lets try the price through a dictionary since the customer has apostrophes in the part number field
+'		V.Local.fPrice.Set(V.Dictionary.dicPricing![V.Local.sRet(0).Trim])
+
+'		'We gotta use the pricing from the Sales Order line
+'		F.Data.DataView.Create("dtSalesStuff", "dvPriceCollector", 22, V.Local.sFilter, "")
+'		F.Intrinsic.Control.If(V.DataView.dtSalesStuff!dvPriceCollector.RowCount, >, 0)
+'			V.Local.fPrice.Set(V.DataView.dtSalesStuff!dvPriceCollector(0).PRICING!FieldValFloat)
+'		F.Intrinsic.Control.Else
+'			V.Local.fPrice.Set("0.0000")
+'		F.Intrinsic.Control.EndIf
+'		F.Data.DataView.Close("dtSalesStuff", "dvPriceCollector")
+		
+		F.Data.DataTable.AddRow("dtJobWeight", "JOB", V.DataTable.dtJSS(V.Local.iLoop).JOB!FieldValTrim, "SUFFIX", V.DataTable.dtJSS(V.Local.iLoop).SUFFIX!FieldValTrim, "PART", V.Local.sRet(0).Trim, "LOCATION", V.Local.sRet(2).Trim, "QUANTITY", V.Local.fQuantity, "JOB_PRICE", V.Local.fPrice)
+		
+	F.Intrinsic.Control.EndIf
+	F.Data.DataView.Close("dtJobWeight", "dvDupCheck")
+	
+F.Intrinsic.Control.Next(V.Local.iLoop)
+
+'F.Data.Dictionary.Close("dicPrice")
+
+'F.Data.Dictionary.Close("dicPricing")
+'F.Data.DataTable.Close("dtSalesStuff")
+
+Gui.F_ItemRec.lblProg.Text("Performing last computations...")
+Gui.F_ItemRec.progProcess.Value(V.DataTable.dtJSS.RowCount)
+
+'Now our tables will have the data filled out, we can calculate the weight of each job
+F.Data.DataTable.AddExpressionColumn("dtJobWeight", "TOTAL_JOB_PRICE", "Float", "QUANTITY*JOB_PRICE")
+
+F.Data.DataTable.Compute("dtJobWeight", "SUM(TOTAL_JOB_PRICE)", "", V.Local.fTotal)
+
+'Now we can calculate the percentage by adding a new expression column..
+F.Intrinsic.Control.If(V.Local.fTotal, <>, 0)
+	F.Intrinsic.String.Build("[TOTAL_JOB_PRICE] / {0}", V.Local.fTotal, V.Local.sExpression)
+F.Intrinsic.Control.Else
+	V.Local.sExpression.Set("0")
+F.Intrinsic.Control.EndIf
+
+F.Data.DataTable.AddExpressionColumn("dtJobWeight", "JOB_VALUE", "Float", V.Local.sExpression)
+
+F.Data.DataTable.AddColumn("dtJobWeight", "QUANTITY_CHANGE", "Float", 0.000)
+
+F.Data.DataTable.AddExpressionColumn("dtJobWeight", "MAT_TOBEISSUED", "Float", "[JOB_VALUE] * [QUANTITY_CHANGE]")
+
+F.Intrinsic.Control.CallSub(NewQuantityCalc)
+
+'Set the grid
+F.Intrinsic.Control.CallSub(GridProperties)
+
+Gui.F_ItemRec.progProcess.Visible(False)
+Gui.F_ItemRec.lblProg.Visible(False)
+Gui.F_ItemRec.gsgcDistribution.ResumeLayout
+Gui.F_ItemRec.gsgcDistribution.Visible(True)
+
+F.Intrinsic.Control.UnBlockEvents
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.UnBlockEvents
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.PopulateItemHistory.End
+
+Program.Sub.ClearForm.Start
+F.Intrinsic.Control.Try
+
+'We are going to clear the form in this subroutine. Most likely fired from the issue material subroutine after the material was issued
+Gui.F_ItemRec.txtPartNo.Text("")
+Gui.F_ItemRec.txtLoc.Text("")
+Gui.F_ItemRec.txtOnHand.Text("")
+Gui.F_ItemRec.txtNewOH.Text("")
+
+Gui.F_ItemRec.txtPartNo.Locked(False)
+Gui.F_ItemRec.txtLoc.Locked(False)
+Gui.F_ItemRec.txtNewOH.Locked(False)
+
+Gui.F_ItemRec.cmdIssue.Enabled(False)
+
+Gui.F_ItemRec.lblMsg.Visible(False)
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.ClearForm.End
+
+Program.Sub.NewQuantityCalc.Start
+F.Intrinsic.Control.Try
+V.Local.fTotalIssue.Declare(Float, 0.0000)
+V.Local.fOnHand.Declare(Float, 0.0000)
+V.Local.fToChange.Declare(Float, 0.0000)
+V.Local.fRet.Declare(Float, 0.0000)
+
+'This will fire from when the user tabs out of the 'New Qty On Hand' textbox. We will be calculating the total amount that needs to be issued and then distributing it based off the weight of the job
+F.Intrinsic.Control.If(V.Screen.F_ItemRec!txtNewOH.Text, <>, "")
+	V.Local.fOnHand.Set(V.Screen.F_ItemRec!txtOnHand.Text)
+	V.Local.fToChange.Set(V.Screen.F_ItemRec!txtNewOH.Text)
+	
+	F.Intrinsic.Math.Sub(V.Local.fOnHand, V.Local.fToChange, V.Local.fTotalIssue)
+	
+	'We need two checks to continue. First, the part and grid have been populated (i.e. there are work orders that we need to distribute this amount to)
+	F.Intrinsic.Control.If(V.DataTable.dtJobWeight.Exists, =, True)
+	
+		F.Data.DataTable.SetValue("dtJobWeight", -1, "QUANTITY_CHANGE", V.Local.fTotalIssue)
+		
+		'At this point if we have populated teh quantity change, and therefore the quantity to balance, we will make the Issue Material button usable
+		Gui.F_ItemRec.cmdIssue.Enabled(True)
+		
+	F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.NewQuantityCalc.End
+
+Program.Sub.GridProperties.Start
+F.Intrinsic.Control.Try
+
+Gui.F_ItemRec.gsgcDistribution.AddGridviewFromDataTable("gridDist", "dtJobWeight")
+
+Gui.F_ItemRec.gsgcDistribution.SetGridviewProperty("gridDist", "MultiSelect", False)
+Gui.F_ItemRec.gsgcDistribution.SetGridviewProperty("gridDist", "AllowSort", True)
+Gui.F_ItemRec.gsgcDistribution.SetGridviewProperty("gridDist", "AllowFilter", True)
+Gui.F_ItemRec.gsgcDistribution.SetGridviewProperty("gridDist", "OptionsViewColumnAutoWidth", False)
+Gui.F_ItemRec.gsgcDistribution.SetGridviewProperty("gridDist", "OptionsFindAlwaysVisible", False)
+Gui.F_ItemRec.gsgcDistribution.SetGridviewProperty("gridDist", "OptionsViewShowAutoFilterRow", False)
+
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "QUANTITY_CHANGE", "Visible", False)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "TOTAL_JOB_PRICE", "Visible", False)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "LOCATION", "Visible", False)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "INV_PRICE", "Visible", False)
+
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB", "Caption", "Job")
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "SUFFIX", "Caption", "Suffix")
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "PART", "Caption", "P\N")
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "QUANTITY", "Caption", "Order Qty")
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_PRICE", "Caption", "Price")
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_VALUE", "Caption", "Job Value")
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "MAT_TOBEISSUED", "Caption", "Qty to Balance")
+
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB", "AllowEdit", False)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "SUFFIX", "AllowEdit", False)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "PART", "AllowEdit", False)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "QUANTITY", "AllowEdit", False)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_PRICE", "AllowEdit", False)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_VALUE", "AllowEdit", False)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "MAT_TOBEISSUED", "AllowEdit", False)
+
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB", "ReadOnly", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "SUFFIX", "ReadOnly", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "PART", "ReadOnly", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "QUANTITY", "ReadOnly", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_PRICE", "ReadOnly", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_VALUE", "ReadOnly", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "MAT_TOBEISSUED", "ReadOnly", True)
+
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB", "Width", 50)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "SUFFIX", "Width", 50)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "PART", "Width", 50)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "QUANTITY", "Width", 50)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_PRICE", "Width", 50)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_VALUE", "Width", 50)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "MAT_TOBEISSUED", "Width", 50)
+
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB", "MinWidth", 150)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "SUFFIX", "MinWidth", 100)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "PART", "MinWidth", 200)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "QUANTITY", "MinWidth", 100)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_PRICE", "MinWidth", 100)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_VALUE", "MinWidth", 100)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "MAT_TOBEISSUED", "MinWidth", 150)
+
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB", "HeaderFontBold", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "SUFFIX", "HeaderFontBold", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "PART", "HeaderFontBold", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "QUANTITY", "HeaderFontBold", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_PRICE", "HeaderFontBold", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_VALUE", "HeaderFontBold", True)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "MAT_TOBEISSUED", "HeaderFontBold", True)
+
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB", "VisibleIndex", 1)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "SUFFIX", "VisibleIndex", 2)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "PART", "VisibleIndex", 3)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "QUANTITY", "VisibleIndex", 4)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_PRICE", "VisibleIndex", 5)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_VALUE", "VisibleIndex", 6)
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "MAT_TOBEISSUED", "VisibleIndex", 7)
+
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "QUANTITY", "DisplayCustomNumeric", "#,###,###,##0.0000")
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_PRICE", "DisplayCustomNumeric", "$#,###,###,##0.0000")
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "JOB_VALUE", "DisplayCustomNumeric", "#0.0000%")
+Gui.F_ItemRec.gsgcDistribution.SetColumnProperty("gridDist", "MAT_TOBEISSUED", "DisplayCustomNumeric", "#,###,###,##0.0000")
+
+Gui.F_ItemRec.gsgcDistribution.MainView("gridDist")
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.GridProperties.End
+
+Program.Sub.IssueMaterial.Start
+F.Intrinsic.Control.Try
+V.Local.sMessage.Declare(String, "")
+V.Local.sQtyFormat.Declare(String, "")
+V.Local.sSequence.Declare(String, "")
+V.Local.sFilter.Declare(String, "")
+V.Local.sTemp.Declare(String, "")
+V.Local.sPartNo.Declare(String, "")
+V.Local.sLoc.Declare(String, "")
+V.Local.sPartRev.Declare(String, "")
+V.Local.fOnHand.Declare(Float, 0.0000)
+V.Local.fToChange.Declare(Float, 0.0000)
+V.Local.fResulting.Declare(Float, 0.0000)
+V.Local.fToIssue.Declare(Float, 0.0000)
+V.Local.fDiscrepancy.Declare(Float, 0.0000)
+V.Local.fSummation.Declare(Float, 0.0000)
+V.Local.iLoop.Declare(Long, 0)
+V.Local.iSeqs.Declare(Long, 0)
+V.Local.dTimeDisplay.Declare(Date, "01/01/1900")
+
+'Separate the part and rev
+F.Intrinsic.String.RPad(V.Screen.F_ItemRec!txtPartNo.Text, " ", 20, V.Local.sTemp)
+F.Intrinsic.String.Left(V.Local.sTemp, 17, V.Local.sPartNo)
+F.Intrinsic.String.Right(V.Local.sTemp, 3, V.Local.sPartRev)
+V.Local.sLoc.Set(V.Screen.F_ItemRec!txtLoc.Text)
+
+'This will be fired from teh Issue Material button on the screen. Once we can confirm that we can proceed, we need to disable textboxes, buttons and grid
+F.Intrinsic.Control.If(V.DataTable.dtJobWeight.Exists, =, True)
+	
+	F.Intrinsic.Control.BlockEvents
+	
+	'Global date and time was recorded in the refresh subroutine. we update the form so they know the date/time of processing that is being recorded
+	F.Intrinsic.Date.ConvertTString(V.Global.sLastTime, "HHNNSS", V.Local.dTimeDisplay)
+	F.Intrinsic.String.Format(V.Local.dTimeDisplay, "h:Nn:Ss AMPM", V.Local.sTemp)
+	
+	F.Intrinsic.String.Build("Part number {0} was last processed on {1} {2}.", V.Screen.F_ItemRec!txtPartNo.Text, V.Global.dLastDate, V.Local.sTemp, V.Local.sMessage)
+	Gui.F_ItemRec.lblMsg.Text(V.Local.sMessage)
+	
+	'Translate all of the data to the datatable for the library	
+	F.Data.DataView.Create("dtJobWeight", "dvIssuing", 22, "MAT_TOBEISSUED <> 0.0000", "JOB_VALUE DESC")
+	
+	Gui.F_ItemRec.progProcess.Min(0)
+	Gui.F_ItemRec.progProcess.Max(V.DataView.dtJobWeight!dvIssuing.RowCount)
+	Gui.F_ItemRec.progProcess.Value(0)
+	Gui.F_ItemRec.progProcess.Visible(True)
+	Gui.F_ItemRec.lblProg.Text("Building files for the material reconciliation.")
+	Gui.F_ItemRec.lblProg.Visible(True)
+	Gui.F_ItemRec.gsgcDistribution.Visible(False)
+	Gui.F_ItemRec.txtPartNo.Locked(True)
+	Gui.F_ItemRec.txtLoc.Locked(True)
+	Gui.F_ItemRec.txtNewOH.Locked(True)
+	
+	F.Intrinsic.Control.For(V.Local.iLoop, 0, V.DataView.dtJobWeight!dvIssuing.RowCount--, 1)
+		
+		F.Intrinsic.String.Build("Building files for the material reconciliation. WO {0}; {1} out of {2} lines", V.DataView.dtJobWeight!dvIssuing(V.Local.iLoop).JOB!FieldValTrim, V.Local.iLoop, V.DataView.dtJobWeight!dvIssuing.RowCount, V.Local.sMessage)
+		Gui.F_ItemRec.lblProg.Text(V.Local.sMessage)
+		
+		Gui.F_ItemRec.progProcess.Value(V.Local.iLoop)
+		
+		F.Intrinsic.String.Format(V.DataView.dtJobWeight!dvIssuing(V.Local.iLoop).MAT_TOBEISSUED!FieldValFloat, "######0.0000", V.Local.sQtyFormat)
+		''Make a quick dataview of the dtItemHist table to capture the sequence to issue the material to
+		F.Intrinsic.String.Build("[JOB] = '{0}' and [SUFFIX] = '{1}'", V.DataView.dtJobWeight!dvIssuing(V.Local.iLoop).JOB!FieldValTrim, V.DataView.dtJobWeight!dvIssuing(V.Local.iLoop).SUFFIX!FieldValTrim, V.Local.sFilter)
+		F.Data.DataView.Create("dtItemHist", "dvSeqGrab", 22, V.Local.sFilter, "SEQUENCE DESC")
+		
+		F.Intrinsic.Control.If(V.DataView.dtItemHist!dvSeqGrab.RowCount, <>, 0)
+			V.Local.sSequence.Set(V.DataView.dtItemHist!dvSeqGrab(0).SEQUENCE!FieldVal)
+		F.Intrinsic.Control.Else
+			'Default to 995000 if no sequence is found.
+			V.Local.sSequence.Set("995000")
+		F.Intrinsic.Control.EndIf
+		
+		F.Data.DataView.Close("dtItemHist", "dvSeqGrab")
+		
+		F.Data.DataTable.AddRow("450100", "PART", V.Local.sPartNo, "REV", V.Local.sPartRev, "LOCATION", V.Local.sLoc, "QUANTITY", V.Local.sQtyFormat, "LOT", "", "BIN", "", "HEAT", "", "SERIAL", "", "WONUMBER", V.DataView.dtJobWeight!dvIssuing(V.Local.iLoop).JOB!FieldValTrim, "WOSUFFIX", V.DataView.dtJobWeight!dvIssuing(V.Local.iLoop).SUFFIX!FieldValTrim, "WOSEQ", V.Local.sSequence)
+		
+		F.Intrinsic.Math.Add(V.Local.sQtyFormat.Float, V.Local.fSummation, V.Local.fSummation)
+		
+	F.Intrinsic.Control.Next(V.Local.iLoop)
+	
+	Gui.F_ItemRec.progProcess.Value(V.DataView.dtJobWeight!dvIssuing.RowCount)
+	Gui.F_ItemRec.lblProg.Text("Processing file to issue material.")
+	
+	'We can verify that the amount about to be issued equals the amount that needs to be issued..
+	V.Local.fOnHand.Set(V.Screen.F_ItemRec!txtOnHand.Text)
+	V.Local.fToChange.Set(V.Screen.F_ItemRec!txtNewOH.Text)
+	
+	F.Intrinsic.Math.Sub(V.Local.fOnHand, V.Local.fToChange, V.Local.fResulting)
+	
+	'This sadly wont work because the quantity column in the library is a string..Went back and summed the total through the loop
+	F.Intrinsic.Math.Sub(V.Local.fResulting, V.Local.fSummation, V.Local.fDiscrepancy)
+	
+	F.Intrinsic.Control.If(V.Local.fDiscrepancy, <>, 0)
+		'Add the discrepancy to the first row of the table. The table should be ordered by the weight of the job
+		F.Intrinsic.Math.Add(V.DataTable.450100(0).Quantity!FieldValFloat, V.Local.fDiscrepancy, V.Local.fToIssue)
+		F.Intrinsic.String.Format(V.Local.fToIssue, "######0.0000", V.Local.sQtyFormat)
+		F.Data.DataTable.SetValue("450100", 0, "QUANTITY", V.Local.sQtyFormat)
+		
+	F.Intrinsic.Control.EndIf
+		
+	'Now that all of the data has been converted from the grid information into the library table, we can call teh library to put the file together and call the program to issue the material.
+	F.Intrinsic.Control.CallSub(450100Sync)
+	
+	F.Intrinsic.String.TimeStringSec(V.Ambient.Now, V.Global.sLastTime)
+	
+	F.Intrinsic.Control.CallSub(SaveRecord)
+	
+	F.Intrinsic.Control.CallSub(ClearForm)
+	
+	'Close out all of the datatables and hide the progress bar things
+	Gui.F_ItemRec.lblProg.Visible(False)
+	Gui.F_ItemRec.progProcess.Visible(False)
+	
+	F.Data.DataView.Close("dtItemHist", "dvJobs")
+	F.Data.DataTable.Close("dtItemHist")
+	F.Data.DataView.Close("dtJobWeight", "dvIssuing")
+	F.Data.DataTable.Close("dtJobWeight")
+	
+	F.Intrinsic.UI.Msgbox("Issue Material completed", "Issue material completed")
+	'Issue material completed.
+	
+	F.Intrinsic.Control.UnBlockEvents
+	
+F.Intrinsic.Control.Else
+	'Somethings wrong and data was lost and the material cannot be issued
+	
+	Gui.F_ItemRec.cmdIssue.Enabled(False)
+	F.Intrinsic.Control.ExitSub
+	
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.IssueMaterial.End
+
+Program.Sub.SaveRecord.Start
+F.Intrinsic.Control.Try
+V.Local.sTemp.Declare(String, "")
+V.Local.sPartNo.Declare(String, "")
+V.Local.sPartRev.Declare(String, "")
+V.Local.sLoc.Declare(String, "")
+V.Local.sSql.Declare(String, "")
+
+F.ODBC.Connection!conx.OpenCompanyConnection
+
+F.Intrinsic.String.RPad(V.Screen.F_ItemRec!txtPartNo.Text, " ", 20, V.Local.sTemp)
+F.Intrinsic.String.Left(V.Local.sTemp, 17, V.Local.sPartNo)
+F.Intrinsic.String.Right(V.Local.sTemp, 3, V.Local.sPartRev)
+V.Local.sLoc.Set(V.Screen.F_ItemRec!txtLoc.Text)
+
+F.Intrinsic.String.Build("Select PART_NO, PART_REV, LOCATION, DATE_LAST_RUN, TIME_LAST_RUN, LAST_USER from GCG_6252_LAST_DT_ISS where PART_NO = '{0}' and PART_REV = '{1}' and LOCATION = '{2}' order by DATE_LAST_RUN", V.Local.sPartNo.Trim, V.Local.sPartRev.Trim, V.Local.sLoc.Trim, V.Local.sSql)
+
+F.ODBC.Connection!conx.OpenRecordsetRW("rstSave", V.Local.sSql)
+
+F.Intrinsic.Control.If(V.ODBC.conx!rstSave.EOF, =, True)
+	F.ODBC.conx!rstSave.AddNew
+	F.ODBC.conx!rstSave.Set!PART_NO(V.Local.sPartNo.Trim)
+	F.ODBC.conx!rstSave.Set!PART_REV(V.Local.sPartRev.Trim)
+	F.ODBC.conx!rstSave.Set!LOCATION(V.Local.sLoc.Trim)
+	
+F.Intrinsic.Control.EndIf
+
+F.ODBC.conx!rstSave.Set!DATE_LAST_RUN(V.Global.dLastDate.PervasiveDate)
+F.ODBC.conx!rstSave.Set!TIME_LAST_RUN(V.Global.sLastTime.Trim)
+F.ODBC.conx!rstSave.Set!LAST_USER(V.Caller.User)
+
+F.ODBC.conx!rstSave.Update
+
+F.ODBC.conx!rstSave.Close
+F.ODBC.Connection!conx.Close
+
+F.Intrinsic.Control.Catch
+F.ODBC.Connection!conx.Close
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.SaveRecord.End
+
+Program.Sub.LastTimeRanCheck.Start
+F.Intrinsic.Control.Try
+V.Local.sTemp.Declare(String, "")
+V.Local.sPartNo.Declare(String, "")
+V.Local.sPartRev.Declare(String, "")
+V.Local.sLoc.Declare(String, "")
+V.Local.sSql.Declare(String, "")
+V.Local.sRet.Declare(String, "")
+V.Local.sMessage.Declare(String, "")
+V.Local.dTimeDisplay.Declare(Date, "01/01/1900")
+
+F.ODBC.Connection!conx.OpenCompanyConnection
+
+F.Intrinsic.String.RPad(V.Screen.F_ItemRec!txtPartNo.Text, " ", 20, V.Local.sTemp)
+F.Intrinsic.String.Left(V.Local.sTemp, 17, V.Local.sPartNo)
+F.Intrinsic.String.Right(V.Local.sTemp, 3, V.Local.sPartRev)
+V.Local.sLoc.Set(V.Screen.F_ItemRec!txtLoc.Text)
+
+'Gather the date that the part was last ran:
+F.Intrinsic.String.Build("Select Top 1 DATE_LAST_RUN, TIME_LAST_RUN from GCG_6252_LAST_DT_ISS where PART_NO = '{0}' and PART_REV = '{1}' and LOCATION = '{2}' order by DATE_LAST_RUN Desc", V.Local.sPartNo.Trim, V.Local.sPartRev.Trim, V.Local.sLoc.Trim, V.Local.sSql)
+
+F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSql, V.Local.sRet)
+'****************************************************
+
+F.Intrinsic.Control.If(V.Local.sRet.Trim, <>, "")
+	F.Intrinsic.String.Split(V.Local.sRet, "*!*", V.Local.sRet)
+	V.Global.dLastDate.Set(V.Local.sRet(0))
+	V.Global.sLastTime.Set(V.Local.sRet(1))
+	
+	F.Intrinsic.Date.ConvertTString(V.Global.sLastTime, "HHNNSS", V.Local.dTimeDisplay)
+	F.Intrinsic.String.Format(V.Local.dTimeDisplay, "h:Nn:Ss AMPM", V.Local.sTemp)
+	
+	F.Intrinsic.String.Build("Part number {0}{1} was last processed on {2} {3}.", V.Local.sPartNo, V.Local.sPartRev, V.Global.dLastDate, V.Local.sTemp, V.Local.sMessage)
+	
+F.Intrinsic.Control.Else
+	'TO TEST
+'	F.Intrinsic.Date.DateAdd("d", -30, V.Ambient.Date, V.Global.dLastDate)
+	
+	V.Global.dLastDate.Set("03/02/2021")
+	V.Global.sLastTime.Set("000001")
+	
+	F.Intrinsic.Date.ConvertTString(V.Global.sLastTime, "HHNNSS", V.Local.dTimeDisplay)
+	F.Intrinsic.String.Format(V.Local.dTimeDisplay, "h:Nn:Ss AMPM", V.Local.sTemp)
+	
+	F.Intrinsic.String.Build("No previously recorded process for part number {0}{1}. {3}Date {2} 12:00:00 AM will be used.", V.Local.sPartNo, V.Local.sPartRev, V.Global.dLastDate, V.Ambient.NewLine, V.Local.sMessage)
+	
+F.Intrinsic.Control.EndIf
+
+Gui.F_ItemRec.lblMsg.Text(V.Local.sMessage)
+
+Gui.F_ItemRec.lblMsg.Visible(True)
+
+F.ODBC.Connection!conx.Close
+
+F.Intrinsic.Control.CallSub(Refresh)
+
+F.Intrinsic.Control.Catch
+F.ODBC.Connection!conx.Close
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.LastTimeRanCheck.End
+
+Program.Sub.Comments.Start
+${$5$}$2.0.0.0$}$2
+${$6$}$bbaker$}$20230613090248297$}$pM7xsHplA2E9VCTenDTJ47gi1rF/t66We+b4tSCMJc+ZI3JMxxpGBt+TsrskeWVpx1WvQVq4iOc=
+Program.Sub.Comments.End
